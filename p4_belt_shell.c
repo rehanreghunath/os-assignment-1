@@ -9,9 +9,6 @@
 #define MAX_LINE 1024
 #define MAX_ARGS 64
 
-char queue[MAX_ITEMS][256];
-int queue_count = 0;
-
 volatile sig_atomic_t sigint_flag = 0;
 
 void sigint_handler(int sig) {
@@ -19,20 +16,21 @@ void sigint_handler(int sig) {
     sigint_flag = 1;
 }
 
-void add_item(char *name) {
+void add_item(char queue[][256], int *queue_count, char *name) {
     if (name == NULL) {
         printf("Error: item name missing\n");
         return;
     }
-    if (queue_count >= MAX_ITEMS) {
+    if (*queue_count >= MAX_ITEMS) {
         printf("Error: queue is full\n");
         return;
     }
-    strncpy(queue[queue_count], name, 255);
-    queue_count++;
+    strncpy(queue[*queue_count], name, 255);
+    queue[*queue_count][255] = '\0';
+    (*queue_count)++;
 }
 
-void list_items() {
+void list_items(char queue[][256], int queue_count) {
     if (queue_count == 0) {
         printf("Queue is empty\n");
         return;
@@ -59,8 +57,14 @@ void run_external(char *args[]) {
 }
 
 int main() {
-    signal(SIGINT, sigint_handler);
+    struct sigaction sa;
+    sa.sa_handler = sigint_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, NULL);
 
+    char queue[MAX_ITEMS][256] = {0};
+    int queue_count = 0;
     char line[MAX_LINE];
 
     while (1) {
@@ -96,9 +100,9 @@ int main() {
         if (argc == 0) continue;
 
         if (strcmp(args[0], "add_item") == 0) {
-            add_item(argc > 1 ? args[1] : NULL);
+            add_item(queue, &queue_count, argc > 1 ? args[1] : NULL);
         } else if (strcmp(args[0], "list_items") == 0) {
-            list_items();
+            list_items(queue, queue_count);
         } else if (strcmp(args[0], "quit") == 0) {
             break;
         } else if (strcmp(args[0], "date") == 0) {

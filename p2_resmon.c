@@ -23,7 +23,7 @@ void run_pipeline_topk(int k) {
         dup2(fd[1], STDOUT_FILENO);
         close(fd[0]);
         close(fd[1]);
-        execlp("ps", "ps", "-eo", "pid,comm,%cpu,%mem", "--no-headers", NULL);
+        execlp("ps", "ps", "aux", NULL);
         _exit(1);
     }
     close(fd[1]);
@@ -36,11 +36,13 @@ void run_pipeline_topk(int k) {
 
     while (fgets(line, sizeof(line), fp) && nproc < 4096) {
         int pid_v;
-        char comm[64];
+        char user[64], comm[64];
         double cpu, mem;
-        if (sscanf(line, "%d %63s %lf %lf", &pid_v, comm, &cpu, &mem) == 4) {
+        if (sscanf(line, "%63s %d %lf %lf %*s %*s %*s %*s %*s %*s %63s",
+                   user, &pid_v, &cpu, &mem, comm) == 5) {
             procs[nproc].pid = pid_v;
             strncpy(procs[nproc].comm, comm, 63);
+            procs[nproc].comm[63] = '\0';
             procs[nproc].cpu = cpu;
             procs[nproc].mem = mem;
             procs[nproc].score = 3 * cpu + 2 * mem;
@@ -61,8 +63,9 @@ void run_pipeline_topk(int k) {
     }
 
     int limit = k < nproc ? k : nproc;
+    printf("%-8s %-20s %8s %8s %10s\n", "PID", "COMMAND", "CPU%", "MEM%", "SCORE");
     for (int i = 0; i < limit; i++) {
-        printf("PID=%d CMD=%s CPU%%=%.1f MEM%%=%.1f SCORE=%.2f\n",
+        printf("%-8d %-20s %8.1f %8.1f %10.2f\n",
                procs[i].pid, procs[i].comm, procs[i].cpu, procs[i].mem, procs[i].score);
     }
     free(procs);
@@ -70,18 +73,22 @@ void run_pipeline_topk(int k) {
 
 void print_process_info(int pid) {
     char cmd[128];
-    snprintf(cmd, sizeof(cmd), "ps -o pid,comm,user,%%cpu,%%mem -p %d --no-headers", pid);
+    snprintf(cmd, sizeof(cmd), "ps u -p %d", pid);
     FILE *fp = popen(cmd, "r");
     if (!fp) return;
     char line[MAX_LINE];
+    fgets(line, sizeof(line), fp);
     if (fgets(line, sizeof(line), fp)) {
         int pid_v;
         char comm[64], user[64];
         double cpu, mem;
-        if (sscanf(line, "%d %63s %63s %lf %lf", &pid_v, comm, user, &cpu, &mem) == 5) {
+        if (sscanf(line, "%63s %d %lf %lf %*s %*s %*s %*s %*s %*s %63s",
+                   user, &pid_v, &cpu, &mem, comm) == 5) {
             double score = 3 * cpu + 2 * mem;
             printf("Process info: PID=%d CMD=%s OWNER=%s CPU%%=%.1f MEM%%=%.1f SCORE=%.2f\n",
                    pid_v, comm, user, cpu, mem, score);
+        } else {
+            printf("Process %d not found\n", pid);
         }
     } else {
         printf("Process %d not found\n", pid);
@@ -90,7 +97,6 @@ void print_process_info(int pid) {
 }
 
 void child_process(int n, int k, int r, key_t key) {
-    signal(SIGINT, SIG_IGN);
     int msgid = msgget(key, 0666);
     int iter = 0;
 
