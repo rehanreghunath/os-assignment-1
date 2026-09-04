@@ -136,8 +136,8 @@ void parent_process(int msgid, pid_t child_pid) {
         pid_t w = waitpid(child_pid, &status, WNOHANG);
         if (w == child_pid) break;
 
-        printf("Enter PID to act on (-1 skip, -2 quit): ");
-        fflush(stdout);
+        printf("Enter PID to act on (-1 skip, -2 quit): \n");
+        //fflush(stdout);
         int val;
         if (scanf("%d", &val) != 1) {
             while (getchar() != '\n');
